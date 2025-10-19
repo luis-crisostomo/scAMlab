@@ -1,0 +1,11 @@
+Package: scAMlab
+Title: Single-cell analysis by Alexander Mildner's lab
+Version: 0.0.0.9000
+Authors@R: 
+    person("Luís", "Crisóstomo", , "first.last@example.com", role = c("aut", "cre"))
+Description: This package implements multiple utility functions wrapping popular single-cell analysis packages in R and Python. This is an effort to streamline and simplify scRNAseq analysis within the research group.
+License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
+    license
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3

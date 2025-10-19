@@ -1,0 +1,219 @@
+#' Generate Classic QC Plots for Single-Cell RNA-seq Data
+#'
+#' @description
+#' Creates standard quality control visualizations for single-cell RNA-seq data
+#' using violin plots and feature scatter plots. Supports both single Seurat
+#' objects and lists of Seurat objects with optional parallel processing.
+#'
+#' @param seurat.obj A Seurat object or a list of Seurat objects. Each object
+#'   should contain standard QC metrics (nCount_RNA, nFeature_RNA, percent.mt,
+#'   percent.rb) in the metadata.
+#' @param assay Character string. Name of the assay to use for plotting.
+#'   Default: "RNA"
+#' @param layer Character string. Name of the layer to use for feature scatter
+#'   plots. Default: "counts"
+#' @param filename Character string. Base name for the output TIFF file(s)
+#'   (without extension). For lists of objects, object names or indices will
+#'   be appended. Default: "QC_classic"
+#' @param BPPARAM BiocParallelParam object for parallel processing when input
+#'   is a list (e.g., MulticoreParam, SnowParam). If NULL, processes
+#'   sequentially using SerialParam. Default: NULL
+#'
+#' @return
+#' \itemize{
+#'   \item For single Seurat object: Returns a patchwork plot object
+#'   \item For list of Seurat objects: Returns a named list of patchwork plot
+#'         objects, with names derived from the input list names or indices
+#' }
+#'
+#' @details
+#' The function generates a 2-row visualization layout for each sample:
+#'
+#' **Row 1 (4 violin plots):**
+#' \itemize{
+#'   \item nCount_RNA (total UMI counts per cell, log10 scale)
+#'   \item nFeature_RNA (number of genes detected per cell)
+#'   \item percent.mt (percentage of mitochondrial reads)
+#'   \item percent.rb (percentage of ribosomal reads)
+#' }
+#'
+#' **Row 2 (3 scatter plots):**
+#' \itemize{
+#'   \item nCount_RNA vs nFeature_RNA (both axes log10 scale)
+#'   \item nCount_RNA vs percent.mt (x-axis log10 scale)
+#'   \item nCount_RNA vs percent.rb (x-axis log10 scale)
+#' }
+#'
+#' @section Required Metadata:
+#' The Seurat object(s) must contain the following metadata columns:
+#' \itemize{
+#'   \item nCount_RNA: Total UMI counts per cell
+#'   \item nFeature_RNA: Number of genes detected per cell
+#'   \item percent.mt: Percentage of mitochondrial gene expression
+#'   \item percent.rb: Percentage of ribosomal gene expression
+#' }
+#'
+#' @section Output Files:
+#' For each Seurat object, saves a TIFF file with dimensions 15×10 inches at
+#' 200 DPI resolution. File naming:
+#' \itemize{
+#'   \item Single object: "{filename}.tiff"
+#'   \item List with names: "{filename}{name}_QC_classic.tiff"
+#'   \item List without names: "{filename}{index}_QC_classic.tiff"
+#' }
+#'
+#' @section Parallel Processing:
+#' When processing multiple samples, you can enable parallel processing by
+#' providing a BiocParallelParam object:
+#' \preformatted{
+#' library(BiocParallel)
+#' # For Unix-like systems (Linux, macOS)
+#' param <- MulticoreParam(workers = 4)
+#'
+#' # For Windows
+#' param <- SnowParam(workers = 4, type = "SOCK")
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Single Seurat object
+#' plot_QC_classic(seurat_obj, filename = "Sample1")
+#'
+#' # List of Seurat objects with parallel processing
+#' library(BiocParallel)
+#' seurat_list <- list(
+#'   Control = seurat_ctrl,
+#'   Treatment1 = seurat_trt1,
+#'   Treatment2 = seurat_trt2
+#' )
+#'
+#' # Sequential processing
+#' plots <- plot_QC_classic(
+#'   seurat.obj = seurat_list,
+#'   filename = "Experiment_"
+#' )
+#'
+#' # Parallel processing (Unix/Mac)
+#' param <- MulticoreParam(workers = 4)
+#' plots <- plot_QC_classic(
+#'   seurat.obj = seurat_list,
+#'   filename = "Experiment_",
+#'   BPPARAM = param
+#' )
+#'
+#' # Parallel processing (Windows)
+#' param <- SnowParam(workers = 4, type = "SOCK")
+#' plots <- plot_QC_classic(
+#'   seurat.obj = seurat_list,
+#'   filename = "Experiment_",
+#'   BPPARAM = param
+#' )
+#'
+#' # Using a different assay or layer
+#' plot_QC_classic(
+#'   seurat.obj = seurat_obj,
+#'   assay = "SCT",
+#'   layer = "data",
+#'   filename = "SCT_QC"
+#' )
+#' }
+#'
+#' @importFrom Seurat VlnPlot FeatureScatter
+#' @importFrom scales trans_format math_format
+#' @importFrom BiocParallel bplapply SerialParam
+#' @importFrom patchwork wrap_plots
+#'
+#' @seealso
+#' \code{\link{plot_QC_UMAP}} for UMAP-based QC visualizations
+#' \code{\link{plot_QC_babraham}} for Babraham Institute QC plots (https://www.bioinformatics.babraham.ac.uk/training/10XRNASeq/seurat_workflow.html#QC)
+#' \code{\link{run_cellbender_QC}} for CellBender-specific QC plots
+#' \code{\link[BiocParallel]{BiocParallelParam}} for parallel processing options
+#'
+#' @export
+plot_QC_classic <- function(seurat.obj, assay = "RNA", layer = "counts",
+                            filename = "QC_classic", BPPARAM = NULL){
+
+  library(Seurat)
+  library(scales)
+  library(BiocParallel)
+
+  # Helper function to create plots for a single Seurat object
+  create_single_qc_plot <- function(obj, assay, layer, base_filename) {
+
+    plot1 <- VlnPlot(obj, assay = assay, layer = layer,
+                     features = c("nCount_RNA", "nFeature_RNA", "percent.mt", "percent.rb"),
+                     ncol = 4)
+
+    # Modify specific subplots to add log scale
+    plot1[[1]] <- plot1[[1]] + scale_y_log10(labels = trans_format("log10", math_format(10^.x)))
+
+    plot2 <- FeatureScatter(obj, slot = "counts", feature1 = "nCount_RNA", feature2 = "nFeature_RNA") +
+      scale_x_log10(labels = trans_format("log10", math_format(10^.x))) +
+      scale_y_log10()
+
+    plot3 <- FeatureScatter(obj, slot = "counts", feature1 = "nCount_RNA", feature2 = "percent.mt") +
+      scale_x_log10(labels = trans_format("log10", math_format(10^.x)))
+
+    plot4 <- FeatureScatter(obj, slot = "counts", feature1 = "nCount_RNA", feature2 = "percent.rb") +
+      scale_x_log10(labels = trans_format("log10", math_format(10^.x)))
+
+    combine.plot <- plot1/(plot2 + plot3 + plot4)
+
+    SaveFigure(combine.plot, name = base_filename, type = "tiff", width = 15, height = 10, res = 200)
+
+    return(combine.plot)
+  }
+
+  # Check if input is a single Seurat object or a list
+  if (inherits(seurat.obj, "Seurat")) {
+    # Single Seurat object
+    message("Processing single Seurat object...")
+    result <- create_single_qc_plot(seurat.obj, assay, layer, filename)
+    return(result)
+
+  } else if (is.list(seurat.obj)) {
+    # List of Seurat objects
+    message(paste("Processing", length(seurat.obj), "Seurat objects..."))
+
+    # Set up parallel processing
+    if (is.null(BPPARAM)) {
+      BPPARAM <- SerialParam()  # Default to serial processing
+    }
+
+    # Validate that all list elements are Seurat objects
+    if (!all(sapply(seurat.obj, function(x) inherits(x, "Seurat")))) {
+      stop("All elements in the list must be Seurat objects")
+    }
+
+    # Generate filenames for each object
+    if (is.null(names(seurat.obj))) {
+      # If list doesn't have names, use indices
+      obj_names <- paste0(filename, seq_along(seurat.obj), "_QC_classic")
+    } else {
+      # Use the names from the list
+      obj_names <- paste0(filename, names(seurat.obj), "_QC_classic")
+    }
+
+    # Create a function for bplapply that captures the parameters
+    process_object <- function(i) {
+      create_single_qc_plot(seurat.obj[[i]], assay, layer, obj_names[i])
+    }
+
+    # Process objects in parallel
+    message("Starting parallel processing...")
+    result_plots <- bplapply(seq_along(seurat.obj), process_object, BPPARAM = BPPARAM)
+
+    # Name the results
+    if (!is.null(names(seurat.obj))) {
+      names(result_plots) <- names(seurat.obj)
+    } else {
+      names(result_plots) <- paste0("Object_", seq_along(seurat.obj))
+    }
+
+    message("Processing completed!")
+    return(result_plots)
+
+  } else {
+    stop("seurat.obj must be either a single Seurat object or a list of Seurat objects")
+  }
+}

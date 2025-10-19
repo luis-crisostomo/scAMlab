@@ -1,0 +1,113 @@
+#' Load Gene Signatures from CSV Files
+#'
+#' @description
+#' Loads gene signatures (gene sets) from CSV files in a specified directory.
+#' Each CSV file should contain a single column of gene names without a header.
+#' Returns a named list where each element is a character vector of genes.
+#'
+#' @param dir Character string. Path to the directory containing CSV files with
+#'   gene signatures. Each CSV file represents one gene signature/set.
+#'
+#' @return A named list of character vectors. Each element contains gene names
+#'   from one CSV file, with the element name derived from the CSV filename
+#'   (without the .csv extension).
+#'
+#' @details
+#' **File Format Requirements:**
+#' \itemize{
+#'   \item Files must have .csv extension
+#'   \item Each file should contain gene names in a single column
+#'   \item No header row (header = FALSE)
+#'   \item One gene name per row
+#' }
+#'
+#' **File Naming:**
+#'
+#' The filename (without .csv) becomes the name of the gene set in the returned list.
+#' For example:
+#' \itemize{
+#'   \item "Tcell_markers.csv" → gene_sets$Tcell_markers
+#'   \item "inflammatory_genes.csv" → gene_sets$inflammatory_genes
+#' }
+#'
+#' **Use Cases:**
+#'
+#' Loaded gene signatures can be used for:
+#' \itemize{
+#'   \item Module scoring with \code{\link[Seurat]{AddModuleScore}}
+#'   \item Gene set enrichment analysis
+#'   \item Cell type annotation
+#'   \item Feature plotting of signature genes
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' # Load all gene signatures from a directory
+#' gene_sets <- LoadSignature("path/to/signatures")
+#'
+#' # View available signatures
+#' names(gene_sets)
+#'
+#' # Access a specific signature
+#' tcell_genes <- gene_sets$Tcell_markers
+#'
+#' # Use with Seurat's AddModuleScore
+#' seurat_obj <- AddModuleScore(
+#'   seurat_obj,
+#'   features = list(gene_sets$inflammatory_genes),
+#'   name = "Inflammatory_Score"
+#' )
+#'
+#' # Score multiple signatures at once
+#' seurat_obj <- AddModuleScore(
+#'   seurat_obj,
+#'   features = gene_sets,  # Pass entire list
+#'   name = "Signature"
+#' )
+#'
+#' # Visualize signature scores
+#' FeaturePlot(seurat_obj, features = "Inflammatory_Score1")
+#' }
+#'
+#' @section Example CSV Format:
+#' Example content of "Tcell_markers.csv":
+#' \preformatted{
+#' Cd3e
+#' Cd3d
+#' Cd4
+#' Cd8a
+#' Il7r
+#' }
+#'
+#' @note
+#' \itemize{
+#'   \item Only .csv files in the directory are processed
+#'   \item Gene names should match the format in your Seurat object (same case,
+#'         same organism)
+#'   \item Empty CSV files will result in empty character vectors
+#' }
+#'
+#' @seealso
+#' \code{\link[Seurat]{AddModuleScore}} for scoring cells with loaded signatures
+#'
+#' @importFrom tools file_path_sans_ext
+#' @importFrom utils read.csv
+#'
+#' @export
+LoadSignature <- function(dir){
+
+  # Get all CSV filenames
+  csv_files <- list.files(dir, pattern = "\\.csv$", full.names = TRUE)
+
+  # Extract base names (without .csv extension) for naming
+  df_names <- tools::file_path_sans_ext(basename(csv_files))
+
+  # Read all CSV files and create a named list
+  df_list <- setNames(lapply(csv_files, read.csv, header = FALSE), df_names)
+
+  gene_sets <- lapply(df_list, `[[`, 1)
+
+  # Assign each dataframe to the global environment with its filename
+  return(gene_sets)
+
+}
