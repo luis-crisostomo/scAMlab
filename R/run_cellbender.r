@@ -20,12 +20,12 @@ export_seurat_to_h5 <- function(seurat_obj, output_path) {
   
   # Try to get raw counts using GetAssayData (works with both v4 and v5)
   tryCatch({
-    raw_counts <- GetAssayData(seurat_obj, assay = "RNA", slot = "counts")
+    raw_counts <- GetAssayData(seurat_obj, assay = "RNA", layer = "counts")
     
     # Check if we actually got count data
     if (is.null(raw_counts) || sum(raw_counts) == 0) {
       # Try the data slot as fallback
-      raw_counts <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+      raw_counts <- GetAssayData(seurat_obj, assay = "RNA", layer = "counts")
       if (!is.null(raw_counts) && sum(raw_counts) > 0) {
         warning("Using data slot instead of counts slot. Make sure these are raw counts!")
       } else {
